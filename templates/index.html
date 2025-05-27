@@ -38,16 +38,22 @@
 
     .file-block {
       display: flex;
-      flex-direction: row;
-      gap: 10px;
-      align-items: center;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-start;
     }
 
-    input[type="file"], input[type="text"] {
+    .file-block input[type="file"], .file-block input[type="text"] {
       padding: 10px;
       font-size: 14px;
       border-radius: 6px;
       border: 1px solid #d1d5db;
+    }
+
+    .range-display {
+      font-size: 14px;
+      color: #4b5563;
+      margin-top: 4px;
     }
 
     button {
@@ -94,7 +100,8 @@
       <div id="file-upload-group">
         <div class="file-block">
           <input type="file" name="pdfs" accept="application/pdf" onchange="previewPDF(this)" required>
-          <input type="text" name="ranges" placeholder="e.g. 1-3" required>
+          <input type="text" name="ranges" placeholder="e.g. 1-3" oninput="updateRangeLabel(this); updatePreviewRange(this);" required>
+          <div class="range-display"></div>
         </div>
       </div>
       <button type="button" onclick="addUpload()">Add Another PDF</button>
@@ -114,7 +121,8 @@
 
       div.innerHTML = `
         <input type="file" name="pdfs" accept="application/pdf" onchange="previewPDF(this)" required>
-        <input type="text" name="ranges" placeholder="e.g. 4-6" required>
+        <input type="text" name="ranges" placeholder="e.g. 4-6" oninput="updateRangeLabel(this); updatePreviewRange(this);" required>
+        <div class="range-display"></div>
       `;
 
       group.appendChild(div);
@@ -123,6 +131,16 @@
     function previewPDF(input) {
       const file = input.files[0];
       if (!file || file.type !== "application/pdf") return;
+
+      const block = input.closest(".file-block");
+      const existingPreview = block.querySelector(".preview-block");
+      if (existingPreview) existingPreview.remove();
+
+      const rangeInput = block.querySelector("input[name='ranges']");
+      const range = rangeInput ? rangeInput.value.trim() : "1-2";
+      const [startStr, endStr] = /^\d+-\d+$/.test(range) ? range.split("-") : ["1", "2"];
+      const start = parseInt(startStr);
+      const end = parseInt(endStr);
 
       const fileReader = new FileReader();
       fileReader.onload = function () {
@@ -133,8 +151,7 @@
           previewDiv.className = "preview-block";
           previewDiv.innerHTML = `<strong>${file.name}</strong><br>`;
 
-          // Show the first 2 pages
-          for (let pageNum = 1; pageNum <= Math.min(2, pdf.numPages); pageNum++) {
+          for (let pageNum = start; pageNum <= Math.min(end, pdf.numPages); pageNum++) {
             pdf.getPage(pageNum).then(function (page) {
               const viewport = page.getViewport({ scale: 0.75 });
               const canvas = document.createElement("canvas");
@@ -147,7 +164,62 @@
             });
           }
 
-          document.getElementById("preview-area").appendChild(previewDiv);
+          block.appendChild(previewDiv);
+        });
+      };
+      fileReader.readAsArrayBuffer(file);
+    }
+
+    function updateRangeLabel(input) {
+      const display = input.nextElementSibling;
+      const value = input.value.trim();
+
+      if (/^\d+-\d+$/.test(value)) {
+        const [start, end] = value.split('-');
+        display.textContent = `📍 Selected range: pages ${start} to ${end}`;
+      } else {
+        display.textContent = ``;
+      }
+    }
+
+    function updatePreviewRange(input) {
+      const block = input.closest(".file-block");
+      const fileInput = block.querySelector("input[type='file']");
+      const file = fileInput.files[0];
+      const range = input.value.trim();
+
+      if (!file || !/^\d+-\d+$/.test(range)) return;
+
+      const [startStr, endStr] = range.split("-");
+      const start = parseInt(startStr);
+      const end = parseInt(endStr);
+
+      const existingPreview = block.querySelector(".preview-block");
+      if (existingPreview) existingPreview.remove();
+
+      const fileReader = new FileReader();
+      fileReader.onload = function () {
+        const typedarray = new Uint8Array(this.result);
+
+        pdfjsLib.getDocument(typedarray).promise.then(function (pdf) {
+          const previewDiv = document.createElement("div");
+          previewDiv.className = "preview-block";
+          previewDiv.innerHTML = `<strong>${file.name}</strong><br>`;
+
+          for (let pageNum = start; pageNum <= Math.min(end, pdf.numPages); pageNum++) {
+            pdf.getPage(pageNum).then(function (page) {
+              const viewport = page.getViewport({ scale: 0.75 });
+              const canvas = document.createElement("canvas");
+              const context = canvas.getContext("2d");
+              canvas.height = viewport.height;
+              canvas.width = viewport.width;
+
+              page.render({ canvasContext: context, viewport: viewport });
+              previewDiv.appendChild(canvas);
+            });
+          }
+
+          block.appendChild(previewDiv);
         });
       };
       fileReader.readAsArrayBuffer(file);
