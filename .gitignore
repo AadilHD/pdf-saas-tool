@@ -1,5 +1,25 @@
+# Python
 venv/
 __pycache__/
-uploads/
 *.pyc
+
+# Flask uploads or generated files
+uploads/
+*.pdf
+
+# Environment variables
 .env
+
+# IDE/Editor settings
+.vscode/
+
+# OS system files
+.DS_Store
+Thumbs.db
+
+# Database files (optional)
+*.db
+*.sqlite3
+
+# Logs (optional)
+*.log

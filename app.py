@@ -1,18 +1,51 @@
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, redirect, url_for, flash
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, current_user
+from datetime import datetime
 import os
 from PyPDF2 import PdfReader, PdfWriter
 from werkzeug.utils import secure_filename
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
+app.secret_key = 'your_secret_key_here'  # Replace with a secure key
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+db = SQLAlchemy(app)
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(150), nullable=False)
+    merge_count = db.Column(db.Integer, default=0)
+    last_reset = db.Column(db.DateTime, default=datetime.utcnow)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/merge-selected', methods=['POST'])
+@login_required
 def merge_selected_pages():
+    # Monthly reset
+    today = datetime.utcnow()
+    if current_user.last_reset is None or current_user.last_reset.month != today.month:
+        current_user.merge_count = 0
+        current_user.last_reset = today
+        db.session.commit()
+
+    # Enforce free user limit
+    if current_user.merge_count >= 5:
+        flash("❌ Monthly merge limit reached. Please upgrade to continue.")
+        return redirect(url_for("index"))
+
     files = request.files.getlist('pdfs')
     page_ranges = request.form.getlist('ranges')
 
@@ -34,7 +67,61 @@ def merge_selected_pages():
     with open(output_path, "wb") as f:
         writer.write(f)
 
+    # Count this merge
+    current_user.merge_count += 1
+    db.session.commit()
+
     return send_file(output_path, as_attachment=True)
+from flask import render_template, redirect, url_for, request, flash
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import login_user, logout_user
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+        existing_user = User.query.filter_by(email=email).first()
+
+        if existing_user:
+            flash("❌ Email already registered.")
+            return redirect(url_for('signup'))
+
+        hashed_password = generate_password_hash(password)
+        new_user = User(email=email, password=hashed_password)
+        db.session.add(new_user)
+        db.session.commit()
+
+        login_user(new_user)
+        flash("✅ Signup successful!")
+        return redirect(url_for('index'))
+
+    return render_template('signup.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+        user = User.query.filter_by(email=email).first()
+
+        if user and check_password_hash(user.password, password):
+            login_user(user)
+            flash("✅ Login successful!")
+            return redirect(url_for('index'))
+        else:
+            flash("❌ Invalid email or password.")
+
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash("👋 You’ve been logged out.")
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)

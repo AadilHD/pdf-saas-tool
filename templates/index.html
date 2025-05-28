@@ -3,37 +3,79 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PDF Merge Tool</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <title>CoreMerge</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <style>
     body {
       margin: 0;
       font-family: 'Inter', sans-serif;
       background: #f3f4f6;
       color: #111827;
+    }
+
+    nav {
+      background-color: #4f46e5; /* Purple header */
+      color: white;
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nav-left img {
+      height: 50px;
+      width: auto;
+      object-fit: contain;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .nav-links a {
+      color: white;
+      text-decoration: none;
+      font-weight: 500;
+      transition: opacity 0.2s;
+    }
+
+    .nav-links a:hover {
+      opacity: 0.85;
+    }
+
+    main {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
       padding: 40px;
     }
 
-    h1 {
-      font-size: 2rem;
-      font-weight: 600;
-      margin-bottom: 20px;
-    }
-
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
+    .card {
       background: white;
       padding: 30px;
       border-radius: 12px;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 800px;
     }
 
-    form {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
+    h2 {
+      margin-bottom: 10px;
+    }
+
+    .info {
+      font-size: 14px;
+      color: #4b5563;
+      margin-bottom: 20px;
     }
 
     .file-block {
@@ -41,19 +83,14 @@
       flex-direction: column;
       gap: 6px;
       align-items: flex-start;
+      margin-bottom: 20px;
     }
 
-    .file-block input[type="file"], .file-block input[type="text"] {
+    input[type="file"], input[type="text"] {
       padding: 10px;
       font-size: 14px;
       border-radius: 6px;
       border: 1px solid #d1d5db;
-    }
-
-    .range-display {
-      font-size: 14px;
-      color: #4b5563;
-      margin-top: 4px;
     }
 
     button {
@@ -71,16 +108,17 @@
       background-color: #4f46e5;
     }
 
-    #preview-area {
+    .logout {
       margin-top: 30px;
+      text-align: center;
     }
 
     .preview-block {
-      margin-bottom: 20px;
       padding: 10px;
       border: 1px solid #e5e7eb;
       border-radius: 8px;
       background: #f9fafb;
+      margin-bottom: 10px;
     }
 
     canvas {
@@ -93,25 +131,44 @@
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🔗 Merge Specific Pages from PDFs</h1>
-
-    <form method="POST" action="/merge-selected" enctype="multipart/form-data">
-      <div id="file-upload-group">
-        <div class="file-block">
-          <input type="file" name="pdfs" accept="application/pdf" onchange="previewPDF(this)" required>
-          <input type="text" name="ranges" placeholder="e.g. 1-3" oninput="updateRangeLabel(this); updatePreviewRange(this);" required>
-          <div class="range-display"></div>
-        </div>
-      </div>
-      <button type="button" onclick="addUpload()">Add Another PDF</button>
-      <button type="submit">Merge Selected Pages</button>
-    </form>
-
-    <div id="preview-area">
-      <h2 style="margin-top: 40px;">📄 Preview Uploaded PDFs</h2>
+  <nav>
+    <div class="nav-left">
+      <img src="/static/coremerge-logo.png" alt="CoreMerge Logo">
     </div>
-  </div>
+    <div class="nav-links">
+      <a href="#">Pricing</a>
+      <a href="#">Docs</a>
+      <a href="#">About</a>
+    </div>
+  </nav>
+
+  <main>
+    <div class="card">
+      <h2>Welcome, {{ current_user.email }}</h2>
+      <p class="info">You’ve used {{ current_user.merge_count }} / 5 merges this month.</p>
+
+      <form method="POST" action="/merge-selected" enctype="multipart/form-data">
+        <div id="file-upload-group">
+          <div class="file-block">
+            <input type="file" name="pdfs" accept="application/pdf" onchange="previewPDF(this)" required>
+            <input type="text" name="ranges" placeholder="e.g. 1-3" required>
+          </div>
+        </div>
+        <button type="button" onclick="addUpload()">Add Another PDF</button>
+        <button type="submit">Merge Selected Pages</button>
+      </form>
+
+      <div id="preview-area">
+        <h3>Preview</h3>
+      </div>
+
+      <div class="logout">
+        <form action="/logout" method="GET">
+          <button type="submit">Logout</button>
+        </form>
+      </div>
+    </div>
+  </main>
 
   <script>
     function addUpload() {
@@ -121,8 +178,7 @@
 
       div.innerHTML = `
         <input type="file" name="pdfs" accept="application/pdf" onchange="previewPDF(this)" required>
-        <input type="text" name="ranges" placeholder="e.g. 4-6" oninput="updateRangeLabel(this); updatePreviewRange(this);" required>
-        <div class="range-display"></div>
+        <input type="text" name="ranges" placeholder="e.g. 4-6" required>
       `;
 
       group.appendChild(div);
@@ -132,15 +188,8 @@
       const file = input.files[0];
       if (!file || file.type !== "application/pdf") return;
 
-      const block = input.closest(".file-block");
-      const existingPreview = block.querySelector(".preview-block");
+      const existingPreview = input.closest(".file-block").querySelector(".preview-block");
       if (existingPreview) existingPreview.remove();
-
-      const rangeInput = block.querySelector("input[name='ranges']");
-      const range = rangeInput ? rangeInput.value.trim() : "1-2";
-      const [startStr, endStr] = /^\d+-\d+$/.test(range) ? range.split("-") : ["1", "2"];
-      const start = parseInt(startStr);
-      const end = parseInt(endStr);
 
       const fileReader = new FileReader();
       fileReader.onload = function () {
@@ -151,7 +200,7 @@
           previewDiv.className = "preview-block";
           previewDiv.innerHTML = `<strong>${file.name}</strong><br>`;
 
-          for (let pageNum = start; pageNum <= Math.min(end, pdf.numPages); pageNum++) {
+          for (let pageNum = 1; pageNum <= Math.min(2, pdf.numPages); pageNum++) {
             pdf.getPage(pageNum).then(function (page) {
               const viewport = page.getViewport({ scale: 0.75 });
               const canvas = document.createElement("canvas");
@@ -164,62 +213,7 @@
             });
           }
 
-          block.appendChild(previewDiv);
-        });
-      };
-      fileReader.readAsArrayBuffer(file);
-    }
-
-    function updateRangeLabel(input) {
-      const display = input.nextElementSibling;
-      const value = input.value.trim();
-
-      if (/^\d+-\d+$/.test(value)) {
-        const [start, end] = value.split('-');
-        display.textContent = `📍 Selected range: pages ${start} to ${end}`;
-      } else {
-        display.textContent = ``;
-      }
-    }
-
-    function updatePreviewRange(input) {
-      const block = input.closest(".file-block");
-      const fileInput = block.querySelector("input[type='file']");
-      const file = fileInput.files[0];
-      const range = input.value.trim();
-
-      if (!file || !/^\d+-\d+$/.test(range)) return;
-
-      const [startStr, endStr] = range.split("-");
-      const start = parseInt(startStr);
-      const end = parseInt(endStr);
-
-      const existingPreview = block.querySelector(".preview-block");
-      if (existingPreview) existingPreview.remove();
-
-      const fileReader = new FileReader();
-      fileReader.onload = function () {
-        const typedarray = new Uint8Array(this.result);
-
-        pdfjsLib.getDocument(typedarray).promise.then(function (pdf) {
-          const previewDiv = document.createElement("div");
-          previewDiv.className = "preview-block";
-          previewDiv.innerHTML = `<strong>${file.name}</strong><br>`;
-
-          for (let pageNum = start; pageNum <= Math.min(end, pdf.numPages); pageNum++) {
-            pdf.getPage(pageNum).then(function (page) {
-              const viewport = page.getViewport({ scale: 0.75 });
-              const canvas = document.createElement("canvas");
-              const context = canvas.getContext("2d");
-              canvas.height = viewport.height;
-              canvas.width = viewport.width;
-
-              page.render({ canvasContext: context, viewport: viewport });
-              previewDiv.appendChild(canvas);
-            });
-          }
-
-          block.appendChild(previewDiv);
+          input.closest(".file-block").appendChild(previewDiv);
         });
       };
       fileReader.readAsArrayBuffer(file);
