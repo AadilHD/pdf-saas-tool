@@ -1,0 +1,22 @@
+<h1>Admin Panel</h1>
+
+<table border="1">
+  <tr>
+    <th>Email</th>
+    <th>Is Admin?</th>
+    <th>Merges</th>
+    <th>Actions</th>
+  </tr>
+  {% for user in users %}
+  <tr>
+    <td>{{ user.email }}</td>
+    <td>{{ 'Yes' if user.is_admin else 'No' }}</td>
+    <td>{{ user.merge_count }}</td>
+    <td>
+      <form method="POST" action="/delete-user/{{ user.id }}" style="display:inline;">
+        <button onclick="return confirm('Delete this user?')">Delete</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>

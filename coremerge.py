@@ -5,11 +5,30 @@ from datetime import datetime
 import os
 from PyPDF2 import PdfReader, PdfWriter
 from werkzeug.utils import secure_filename
+from flask_login import login_required, current_user
+import re
+from flask import session, redirect, url_for, flash  
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from flask import redirect, url_for, flash
+from flask_login import current_user
+from flask_migrate import Migrate
+
+def admin_required(view_func):
+    from functools import wraps
+    @wraps(view_func)
+    def wrapped_view(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            flash("Admins only.")
+            return redirect(url_for("index"))
+        return view_func(*args, **kwargs)
+    return wrapped_view
 
 app = Flask(__name__, static_folder='static')
 app.secret_key = 'your_secret_key_here'  # Replace with a secure key
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
@@ -22,14 +41,23 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(150), nullable=False)
     merge_count = db.Column(db.Integer, default=0)
     last_reset = db.Column(db.DateTime, default=datetime.utcnow)
+    is_admin = db.Column(db.Boolean, default=False)
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
 @app.route('/')
+@login_required
 def index():
-    return render_template('index.html')
+    return render_template('index.html', current_user=current_user)
+
+@app.route('/admin')
+@login_required
+@admin_required
+def admin_dashboard():
+    users = User.query.all()
+    return render_template('admin.html', users=users)
 
 @app.route('/merge-selected', methods=['POST'])
 @login_required
@@ -76,11 +104,46 @@ from flask import render_template, redirect, url_for, request, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, logout_user
 
+@app.route('/delete-account', methods=['POST'])
+@login_required
+def delete_account():
+    user_id = session.get("user_id")
+    user = User.query.get(user_id)
+    
+    if user:
+        db.session.delete(user)
+        db.session.commit()
+        session.clear()
+        flash("Your account has been deleted.")
+    
+    return redirect(url_for("signup"))
+
+@app.route('/delete-user/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def delete_user(user_id):
+    user = User.query.get(user_id)
+    if user:
+        db.session.delete(user)
+        db.session.commit()
+        flash("User deleted.")
+    return redirect(url_for('admin_dashboard'))
+
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
+
+        # ✅ Validate email format
+        if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
+            flash('Invalid email format.')
+            return redirect(url_for('signup'))
+
+        # ✅ Validate password strength
+        if not re.match(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$', password):
+            flash('Password must be at least 8 characters long and include a capital letter, number, and special character.')
+            return redirect(url_for('signup'))
         existing_user = User.query.filter_by(email=email).first()
 
         if existing_user:
