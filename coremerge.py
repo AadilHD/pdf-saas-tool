@@ -1,4 +1,14 @@
-from flask import Flask, render_template, request, send_file, redirect, url_for, flash
+from flask import (
+    Flask,
+    render_template,
+    request,
+    send_file,
+    redirect,
+    url_for,
+    flash,
+    jsonify,
+    abort,
+)
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
     LoginManager,
@@ -16,13 +26,15 @@ from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 
 def admin_required(view_func):
+    """Allow access only to admin users."""
     from functools import wraps
+
     @wraps(view_func)
     def wrapped_view(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.is_admin:
-            flash("Admins only.")
-            return redirect(url_for("index"))
+        if not current_user.is_authenticated or current_user.role != "admin":
+            return abort(403)
         return view_func(*args, **kwargs)
+
     return wrapped_view
 
 app = Flask(__name__, static_folder='static')
@@ -40,6 +52,7 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
+    role = db.Column(db.String(10), nullable=False, default="user")
     merge_count = db.Column(db.Integer, default=0)
     last_reset = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin = db.Column(db.Boolean, default=False)
@@ -59,6 +72,17 @@ def index():
 def admin_dashboard():
     users = User.query.all()
     return render_template('admin.html', users=users)
+
+
+@app.route('/admin/users')
+@login_required
+@admin_required
+def list_users():
+    """Return all users in JSON format."""
+    users = User.query.all()
+    return jsonify([
+        {"id": u.id, "email": u.email, "role": u.role} for u in users
+    ])
 
 @app.route('/merge-selected', methods=['POST'])
 @login_required
@@ -102,7 +126,7 @@ def merge_selected_pages():
 
     return send_file(output_path, as_attachment=True)
 
-@app.route('/delete-account', methods=['POST'])
+@app.route('/delete_account', methods=['POST'])
 @login_required
 def delete_account():
     """Delete the currently authenticated user's account."""
@@ -114,18 +138,19 @@ def delete_account():
         logout_user()
         flash("Your account has been deleted.")
 
-    return redirect(url_for("signup"))
+    return redirect(url_for("index"))
 
-@app.route('/delete-user/<int:user_id>', methods=['POST'])
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
 @login_required
 @admin_required
-def delete_user(user_id):
+def admin_delete_user(user_id):
     user = User.query.get(user_id)
-    if user:
-        db.session.delete(user)
-        db.session.commit()
-        flash("User deleted.")
-    return redirect(url_for('admin_dashboard'))
+    if not user:
+        return jsonify({"success": False, "error": "User not found"}), 404
+
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({"success": True})
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -149,7 +174,7 @@ def signup():
             return redirect(url_for('signup'))
 
         hashed_password = generate_password_hash(password)
-        new_user = User(email=email, password=hashed_password)
+        new_user = User(email=email, password=hashed_password, role="user")
         db.session.add(new_user)
         db.session.commit()
 
