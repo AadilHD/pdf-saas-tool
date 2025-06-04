@@ -1,18 +1,19 @@
 from flask import Flask, render_template, request, send_file, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, login_required, current_user
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    login_user,
+    login_required,
+    current_user,
+    logout_user,
+)
 from datetime import datetime
 import os
 from PyPDF2 import PdfReader, PdfWriter
-from werkzeug.utils import secure_filename
-from flask_login import login_required, current_user
 import re
-from flask import session, redirect, url_for, flash  
-from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from flask import redirect, url_for, flash
-from flask_login import current_user
-from flask_migrate import Migrate
+from werkzeug.security import generate_password_hash, check_password_hash
 
 def admin_required(view_func):
     from functools import wraps
@@ -100,22 +101,19 @@ def merge_selected_pages():
     db.session.commit()
 
     return send_file(output_path, as_attachment=True)
-from flask import render_template, redirect, url_for, request, flash
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import login_user, logout_user
 
 @app.route('/delete-account', methods=['POST'])
 @login_required
 def delete_account():
-    user_id = session.get("user_id")
-    user = User.query.get(user_id)
-    
+    """Delete the currently authenticated user's account."""
+    user = current_user
+
     if user:
         db.session.delete(user)
         db.session.commit()
-        session.clear()
+        logout_user()
         flash("Your account has been deleted.")
-    
+
     return redirect(url_for("signup"))
 
 @app.route('/delete-user/<int:user_id>', methods=['POST'])
