@@ -102,6 +102,11 @@ def merge_selected_pages():
 
     return send_file(output_path, as_attachment=True)
 
+@app.route('/get-merge-count')
+@login_required
+def get_merge_count():
+    return {'count': current_user.merge_count}
+
 @app.route('/delete-account', methods=['POST'])
 @login_required
 def delete_account():
